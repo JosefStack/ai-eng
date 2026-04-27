@@ -3,55 +3,31 @@ import dotenv from "dotenv";
 
 dotenv.config({ quiet: true });
 
-const COINCAP_API_KEY = process.env.COINCAP_API_KEY;
+const COINGECKO_API_KEY = process.env.COINGECKO_API_KEY;
+const BASE_URL = "https://api.coingecko.com/api/v3";
 
-const getCryptoPrice = async ({ crypto }: { crypto: string }): Promise<any> => {
+
+let coinsList: any[] | null = null;
+
+const getCoinId = async ({ symbol }: { symbol: string }): Promise<any> => {
     try {
-
-        const response = await axios.get(`https://rest.coincap.io/v3/price/bysymbol/${crypto}`, {
-            headers: {
-                Authorization: `Bearer ${COINCAP_API_KEY}`,
-            }
-        });
-
-        return {
-            symbol: crypto,
-            price: parseFloat(response.data.data[0]),
-            currency: "USD",
-            note: "the price is in USD"
+        if (!coinsList) {
+            const response = await axios.get(`${BASE_URL}/coins/list`);
+            coinsList = response.data;
         }
 
-    } catch (err: unknown) {
-        console.error("Error fetching crypto price: ", err);
-        
-        const errorMessage = err instanceof Error ? err.message : String(err);
+        const coin = coinsList!.find((coin: any) => coin.symbol.toLowerCase() === symbol.toLowerCase());
+
+        if (!coin) return { error: `No coin found for this symbol: ${symbol}` }
 
         return {
-            toolStatus: "failed",
-            description: "error while executing tool",
-            errorDetails: errorMessage
-        };
-    }
-};
-
-
-const getCryptoHistory = async ({ slug }: { slug: string }): Promise<any> => {
-    try {
-        const response = await axios.get(`https://rest.coincap.io/v3/assets/${slug}/marketcap-history`, {
-            headers: {
-                Authorization: `Bearer ${COINCAP_API_KEY}`,
-            }
-        });
-
-        return {
-            slug: slug,
-            history: response.data.data.slice(0, 30),
-            currency: "USD",
-            note: "history is an array that contains the recent 30 history data points available for the slug. Present a summary or trend. Do not present raw numbers.",
+            symbol,
+            id: coin.id,
+            name: coin.name,
+            note: "Use this id for other crypto tool calls that take id as parameter."
         }
-
-    } catch (err: unknown) {
-        console.error("Error fetching slug history: ", err);
+    } catch (err) {
+        console.error("Error fetching crypto id list: ", err);
 
         const errorMessage = err instanceof Error ? err.message : String(err);
 
@@ -64,6 +40,62 @@ const getCryptoHistory = async ({ slug }: { slug: string }): Promise<any> => {
 }
 
 
+const getCryptoPrice = async ({ id }: { id: string }): Promise<any> => {
+    try {
+
+        const response = await axios.get(`${BASE_URL}/coins/${id}?localization=false&tickers=false&community_data=false&developer_data=false`, {
+            headers: {
+                "x-cg-demo-api-key": COINGECKO_API_KEY,
+            }
+        });
+
+        return {
+            symbol: id,
+            price: parseFloat(response.data.market_data.current_price.usd),
+            currency: "USD",
+            note: "the price is in USD"
+        }
+
+    } catch (err: unknown) {
+        console.error("Error fetching crypto price: ", err);
+
+        const errorMessage = err instanceof Error ? err.message : String(err);
+
+        return {
+            toolStatus: "failed",
+            description: "error while executing tool",
+            errorDetails: errorMessage
+        };
+    }
+};
 
 
-export { getCryptoPrice, getCryptoHistory }
+const getCryptoHistory = async ({ id, date }: { id: string, date: string }): Promise<any> => {
+    try {
+        const response = await axios.get(`${BASE_URL}/coins/${id}/history?date=${date}`, {
+            headers: {
+                "x-cg-demo-api-key": COINGECKO_API_KEY,
+            }
+        });
+
+        return {
+            coinId: id,
+            date,
+            historical_price: parseFloat(response.data.market_data.current_price.usd),
+            currency: "USD",
+            note:"histocial_price is the price of the coin on the given date."        }
+
+    } catch (err: unknown) {
+
+        const errorMessage = err instanceof Error ? err.message : String(err);
+
+        return {
+            toolStatus: "failed",
+            description: "error while executing tool",
+            errorDetails: errorMessage
+        };
+    }
+}
+
+
+export { getCryptoPrice, getCryptoHistory, getCoinId }

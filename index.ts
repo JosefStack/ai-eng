@@ -1,7 +1,7 @@
 import Groq from "groq-sdk";
 import dotenv from "dotenv";
 import readline from "readline";
-import { getCryptoPrice, getCryptoHistory } from "./cryptoApi";
+import { getCryptoPrice, getCryptoHistory, getCoinId } from "./cryptoApi";
 
 dotenv.config({ quiet: true });
 
@@ -34,17 +34,34 @@ const tools: any[] = [
     {
         type: "function",
         function: {
-            name: "getCryptoPrice",
-            description: "Get the current price of a cryptocurrency symbol (e.g., BTC, ETH, XAUUSD).",
+            name: "getCoinId",
+            description: "Get the CoinGecko API coin id for a cryptocurrency symbol. When other tools need coin id as an argument, first call this tool to retrieve it.",
             parameters: {
                 type: "object",
                 properties: {
-                    crypto: {
+                    symbol: {
                         type: "string",
-                        description: "The symbol of the cryptocurrency to fetch the price for."
+                        description: "The symbol of the cyptocurrency to find the id of."
                     }
                 },
-                required: ["crypto"],
+                required: ["symbol"],
+            }
+        }
+    },
+    {
+        type: "function",
+        function: {
+            name: "getCryptoPrice",
+            description: "Get the current price of a cryptocurrency based on the coin id. Use getCoinId to retrieve the coin id of a cryptocurrency. (e.g., bitcoin, ethereum).",
+            parameters: {
+                type: "object",
+                properties: {
+                    id: {
+                        type: "string",
+                        description: "The CoinGecko API id of the cryptocurrency to fetch the price for."
+                    }
+                },
+                required: ["id"],
             }
         }
     },
@@ -52,22 +69,27 @@ const tools: any[] = [
         type: "function",
         function: {
             name: "getCryptoHistory",
-            description: "Get all of the available history for the slug of a cryptocurrency (e.g, bitcoin, binance-coin, usd-coin).",
+            description: "Get the historical price from of a cryptocurrency on a specific date by providing the CoinGekco API id for the cryptocurrency (e.g, bitcoin, ethereum). Use getCoinId to retrieve the coin id of a cryptocurrency.",
             parameters: {
                 type: "object",
                 properties: {
-                    slug: {
+                    id: {
                         type: "string",
-                        descritpion: "The slug of the cryptocurrency to fetch the history for."
+                        descritpion: "The CoinGecko API id of the cryptocurrency to fetch the history for."
+                    },
+                    date: {
+                        type: "string",
+                        description: "he date in DD-MM-YYYY format (e.g., 01-01-2024)."
                     },
                 },
-                required: ["slug"],
+                required: ["id", "date"],
             }
         }
     },
 ];
 
 const available_functions: Record<string, (args: any) => Promise<any>> = {
+    getCoinId: getCoinId,
     getCryptoPrice: getCryptoPrice,
     getCryptoHistory: getCryptoHistory
 };
@@ -103,40 +125,45 @@ const main = async () => {
         const assistantMessage = response.choices[0]?.message;
 
         if (assistantMessage.tool_calls) {
-            messages.push({
-                role: "assistant",
-                tool_calls: assistantMessage.tool_calls,
-            });
-
-            const toolResults = await Promise.all(
-                assistantMessage.tool_calls.map(async (toolCall) => {
-                    const result = await executeToolCall(toolCall);
-                    return { toolCall, result };
-                })
-            );
-
-            for (const toolCall of toolResults) {
+            let currentMessage = assistantMessage;
+            while (currentMessage.tool_calls) {
                 messages.push({
-                    role: "tool",
-                    tool_call_id: toolCall.toolCall.id,
-                    content: JSON.stringify(toolCall.result),
-                })
-            };
+                    role: "assistant",
+                    tool_calls: currentMessage.tool_calls,
+                });
 
-            const finalResponse = await groq.chat.completions.create({
-                model: "llama-3.3-70b-versatile",
-                messages,
-                tools,
-                max_tokens: 1024,
-            });
+                const toolResults = await Promise.all(
+                    currentMessage.tool_calls.map(async (toolCall) => {
+                        const result = await executeToolCall(toolCall);
+                        return { toolCall, result };
+                    })
+                );
 
-            const finalContent = finalResponse.choices[0]?.message?.content || "";
+                for (const toolCall of toolResults) {
+                    messages.push({
+                        role: "tool",
+                        tool_call_id: toolCall.toolCall.id,
+                        content: JSON.stringify(toolCall.result),
+                    })
+                };
+
+                const nextResponse = await groq.chat.completions.create({
+                    model: "llama-3.3-70b-versatile",
+                    messages,
+                    tools,
+                    max_tokens: 1024,
+                });
+
+                currentMessage = nextResponse.choices[0]?.message;
+            }
+
+
+            const finalContent = currentMessage.content || "";
             messages.push({
                 role: "assistant",
                 content: finalContent,
             })
             console.log("\nAssistant: ", finalContent);
-            console.log("== DEBUG == FINAL CONTENT ==: ", finalContent);
             continue;
         };
 
