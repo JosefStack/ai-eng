@@ -1,7 +1,7 @@
 import Groq from "groq-sdk";
 import dotenv from "dotenv";
 import readline from "readline";
-import { getCryptoPrice } from "./cryptoApi";
+import { getCryptoPrice, getCryptoHistory } from "./cryptoApi";
 
 dotenv.config({ quiet: true });
 
@@ -48,7 +48,37 @@ const tools: any[] = [
             }
         }
     },
+    {
+        type: "function",
+        function: {
+            name: "getCryptoHistory",
+            description: "Get all of the available history for the slug of a cryptocurrency (e.g, bitcoin, binance-coin, usd-coin).",
+            parameters: {
+                type: "object",
+                properties: {
+                    slug: {
+                        type: "string",
+                        descritpion: "The slug of the cryptocurrency to fetch the history for."
+                    },
+                },
+                required: ["slug"],
+            }
+        }
+    },
 ];
+
+const available_functions: Record<string, (args: any) => Promise<any>> = {
+    getCryptoPrice: getCryptoPrice,
+    getCryptoHistory: getCryptoHistory
+};
+
+const executeToolCall = async (toolCall: any): Promise<any> => {
+    const functionName = toolCall.function.name;
+    const functionToCall = available_functions[functionName];
+    const functionArgs = JSON.parse(toolCall.function.arguments);
+
+    return await functionToCall(functionArgs)
+}
 
 const main = async () => {
     console.log("Chat started. Type 'exit' to quit.");
@@ -73,18 +103,14 @@ const main = async () => {
         const assistantMessage = response.choices[0]?.message;
 
         if (assistantMessage.tool_calls) {
-
             messages.push({
                 role: "assistant",
                 tool_calls: assistantMessage.tool_calls,
-            })
+            });
 
-            
             const toolResults = await Promise.all(
                 assistantMessage.tool_calls.map(async (toolCall) => {
-                    const args = JSON.parse(toolCall.function.arguments);
-                    const result = await getCryptoPrice(args.crypto);
-
+                    const result = await executeToolCall(toolCall);
                     return { toolCall, result };
                 })
             );
@@ -106,19 +132,21 @@ const main = async () => {
 
             const finalContent = finalResponse.choices[0]?.message?.content || "";
             messages.push({
-                role: "assistant", 
+                role: "assistant",
                 content: finalContent,
             })
-            console.log("\nAssistant: ",  finalContent);
+            console.log("\nAssistant: ", finalContent);
+            console.log("== DEBUG == FINAL CONTENT ==: ", finalContent);
             continue;
         };
-        
+
+        console.log("=== non tool response ; ===")
         messages.push({
             role: "assistant",
             content: assistantMessage.content,
         });
         console.log("\nAssistant: ", assistantMessage.content);
-    
+
     };
 };
 
