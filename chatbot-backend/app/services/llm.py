@@ -13,7 +13,12 @@ async def generate_response(messages: list[dict]):
     async for chunk in stream:
         token = chunk.choices[0].delta.content
         if token:
-            print(type(token))
             yield f"data: {token}\n\n"
+            # this is the convention for server sent events .. 
+            # postman expects this and parses automatically thats why ' yield token ' doesnt work
+            # but with curl this wont do much, since there is no automatic parsing there
+            # we'll have to manually parse for frontend too
+
+    yield "data: [DONE]\n\n"
             
 
