@@ -8,11 +8,24 @@ interface ChatStore {
     messages: Message[];
     isSending: boolean;
     sendMessage: (message: string) => Promise<void>;
+    animateResponse: (text: string) => Promise<void>;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
     messages: [],
     isSending: false,
+
+    animateResponse: async (text: string) => {
+        for (const char of text) {
+            set((state) => {
+                const messages = [...state.messages];
+                const last = messages[messages.length - 1];
+                last.content += char;
+                return { messages }
+            })
+            await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+    },
 
     sendMessage: async (message: string) => {
         const userMessage: Message = {
@@ -63,26 +76,23 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
             if (!reader) throw new Error("Failed to receive message - No reader available");
 
+            let fullResponse = "";
+
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
                 const chunk = decoder.decode(value, { stream: true });
-                const lines = chunk.split("\n\n").filter(Boolean);  
+                const lines = chunk.split("\n\n").filter(Boolean);
 
                 for (const line of lines) {
                     const data = line.replace("data: ", "")
                     if (data == "[DONE]") break;
-
-                    set((state) => {
-                        const messages = [...state.messages];
-                        const last = messages[messages.length - 1];
-                        last.content += data;
-                        return { messages }
-                    })
+                    fullResponse += data
                 }
-
             }
+
+            await get().animateResponse(fullResponse)
 
         } catch (error) {
             console.error("Error sending message:", error);
