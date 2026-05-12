@@ -1,10 +1,24 @@
-from sentence_transformers import util, SentenceTransformer
+import os
+import asyncio
+import asyncpg
+
+from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer, util
+from pgvector.asyncpg import register_vector
+
+from write import embed_and_write
+
+load_dotenv()
+
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
-model = model = SentenceTransformer("all-MiniLM-L6-v2")
+def load_document(path: str) -> str:
+    with open(path, "r") as f:
+        return f.read()
 
 
-def fixed_sized_chunks(text: str, chunk_size: int = 200, overlap: int = 20) -> list[str]:
+def fixed_size_chunks(text: str, chunk_size: int = 200, overlap: int = 20) -> list[str]:
     chunks = []
     start = 0
 
@@ -52,7 +66,7 @@ def recursive_chunks(text: str, max_size: int = 500) -> list[str]:
     return chunks
 
 
-def semantic_chunks(text: str, threshhold: float = 0.5) -> list[str]:
+def semantic_chunks(text: str, threshold: float = 0.5) -> list[str]:
     sentences  = [s.strip() for s in text.split(". ") if s.strip()]
     embeddings = model.encode(sentences)
 
@@ -63,7 +77,7 @@ def semantic_chunks(text: str, threshhold: float = 0.5) -> list[str]:
         similarity = util.cos_sim(embeddings[i-1], embeddings[i]).item()
         # .item() for converting into plain float
 
-        if similarity < threshhold:
+        if similarity < threshold:
             chunks.append(" ".join(current_chunk))
             current_chunk = [sentences[i]]
         else:
@@ -74,4 +88,31 @@ def semantic_chunks(text: str, threshhold: float = 0.5) -> list[str]:
     
     return chunks
 
-        
+
+async def main():
+    text = load_document("data/documents.txt")        
+
+
+    conn = await asyncpg.connect(os.getenv("DATABASE_URL"))
+    await register_vector(conn) 
+
+    print("Writing into fixed_size_chunks")
+    await embed_and_write(conn, "fixed_size_chunks", fixed_size_chunks(text), model)
+
+    print("Writing into paragraph_chunks")
+    await embed_and_write(conn, "paragraph_chunks", paragraph_chunks(text), model)
+
+    print("Writing into recursive_chunks")
+    await embed_and_write(conn, "recursive_chunks", recursive_chunks(text), model)
+
+    print("Writing into sentence_chunks")
+    await embed_and_write(conn, "sentence_chunks", sentence_chunks(text), model)
+
+    print("Writing into semantic_chunks")
+    await embed_and_write(conn, "semantic_chunks", semantic_chunks(text), model)
+
+    await conn.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
