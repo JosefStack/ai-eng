@@ -1,3 +1,7 @@
+from sentence_transformers import SentenceTransformer, util
+
+model = SentenceTransformer("all-MiniLM-L6-v2")
+
 def fixed_size_chunks(text: str, chunk_size: int = 200, overlap: int = 20) -> list[str]:
     chunks = []
     start = 0

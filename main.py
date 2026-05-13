@@ -25,17 +25,17 @@ async def main():
     conn = await asyncpg.connect(os.getenv("DATABASE_URL"))
     await register_vector(conn) 
 
-    print("Writing into fixed_size_chunks")
-    await embed_and_write(conn, "fixed_size_chunks", fixed_size_chunks(text), model)
+    # print("Writing into fixed_size_chunks")
+    # await embed_and_write(conn, "fixed_size_chunks", fixed_size_chunks(text), model)
 
-    print("Writing into paragraph_chunks")
-    await embed_and_write(conn, "paragraph_chunks", paragraph_chunks(text), model)
+    # print("Writing into paragraph_chunks")
+    # await embed_and_write(conn, "paragraph_chunks", paragraph_chunks(text), model)
 
-    print("Writing into recursive_chunks")
-    await embed_and_write(conn, "recursive_chunks", recursive_chunks(text), model)
+    # print("Writing into recursive_chunks")
+    # await embed_and_write(conn, "recursive_chunks", recursive_chunks(text), model)
 
-    print("Writing into sentence_chunks")
-    await embed_and_write(conn, "sentence_chunks", sentence_chunks(text), model)
+    # print("Writing into sentence_chunks")
+    # await embed_and_write(conn, "sentence_chunks", sentence_chunks(text), model)
 
     print("Writing into semantic_chunks")
     await embed_and_write(conn, "semantic_chunks", semantic_chunks(text), model)
