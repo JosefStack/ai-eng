@@ -1,1 +1,1 @@
-a divne into RAG
+a dive into RAG
