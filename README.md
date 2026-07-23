@@ -1,5 +1,1 @@
-for learning deep rag concepts like:
-chunking
-reranking
-hybrid search
-evals
+a divne into RAG
